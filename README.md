@@ -15,8 +15,8 @@ A structural geology stereonet plugin for QField that plots orientation data on 
 
 ## Installation
 
-1. Copy `main.qml` to your QField plugins directory
-2. Restart QField
+1. Upload from zipfile via URL in Qfield App on your device in settings/plugins:
+https://github.com/swaxi/stereonet/archive/refs/heads/main.zip    
 3. Look for the 🌐 button in the toolbar
 
 ## Usage
