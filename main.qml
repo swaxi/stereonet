@@ -158,29 +158,29 @@ Item {
                 }
                 
                 function drawSchmidtNet(ctx, cx, cy, R) {
-                    // Clip to primitive circle
-                    ctx.save()
-                    ctx.beginPath()
-                    ctx.arc(cx, cy, R + 1, 0, 2 * Math.PI)
-                    ctx.clip()
-                    
                     ctx.strokeStyle = "#CCCCCC"
                     ctx.lineWidth = 0.5
                     
-                    // Draw small circles (circles of constant latitude/plunge)
-                    // These are concentric circles in the polar stereonet
-                    for (var lat = 10; lat < 90; lat += 10) {
-                        drawSmallCircle(ctx, cx, cy, R, lat)
+                    // For a structural geology stereonet (polar aspect, lower hemisphere):
+                    // - Small circles are concentric circles (constant plunge/dip)
+                    // - Great circles are the curved lines connecting N-S through E or W
+                    
+                    // Draw small circles (constant plunge) - these ARE concentric circles
+                    // in the polar Schmidt projection
+                    for (var plunge = 10; plunge < 90; plunge += 10) {
+                        // Schmidt formula: r = R * sqrt(2) * sin((90 - plunge)/2)
+                        // which equals: r = R * sqrt(2) * cos(plunge/2) for complement
+                        var r = R * Math.sqrt(2) * Math.cos(plunge * Math.PI / 180 / 2)
+                        ctx.beginPath()
+                        ctx.arc(cx, cy, r, 0, 2 * Math.PI)
+                        ctx.stroke()
                     }
                     
-                    // Draw great circles (meridians in the equatorial stereonet)
-                    // These go from N to S pole, curving E or W
-                    for (var lon = 10; lon <= 80; lon += 10) {
-                        drawGreatCircle(ctx, cx, cy, R, lon)
-                        drawGreatCircle(ctx, cx, cy, R, -lon)
+                    // Draw great circles (planes passing through center)
+                    // These appear as arcs connecting opposite points on the primitive
+                    for (var strike = 10; strike < 180; strike += 10) {
+                        drawGreatCircleArc(ctx, cx, cy, R, strike)
                     }
-                    
-                    ctx.restore()
                     
                     // Outer circle (primitive)
                     ctx.lineWidth = 2
@@ -189,7 +189,7 @@ Item {
                     ctx.arc(cx, cy, R, 0, 2 * Math.PI)
                     ctx.stroke()
                     
-                    // N-S and E-W reference lines (central great circle and equator)
+                    // N-S and E-W reference lines
                     ctx.lineWidth = 0.5
                     ctx.strokeStyle = "#999999"
                     ctx.beginPath()
@@ -212,74 +212,106 @@ Item {
                     ctx.fillText("W", cx - R - 12, cy)
                 }
                 
-                // Draw a small circle (constant latitude/plunge) on the Schmidt net
-                // lat: latitude in degrees (0 = equator, 90 = pole)
-                function drawSmallCircle(ctx, cx, cy, R, lat) {
+                // Draw a great circle arc on the Schmidt net
+                // A great circle passes through the center of the sphere
+                // On a polar stereonet, it appears as an arc from one edge to the opposite edge
+                // strike: the azimuth where the arc crosses the primitive (0-180)
+                function drawGreatCircleArc(ctx, cx, cy, R, strike) {
                     ctx.beginPath()
                     var first = true
-                    var latRad = lat * Math.PI / 180
+                    var strikeRad = strike * Math.PI / 180
                     
-                    // Trace around the small circle by varying longitude
-                    for (var lon = 0; lon <= 360; lon += 3) {
-                        var lonRad = lon * Math.PI / 180
+                    // A great circle with this strike goes from azimuth=strike to azimuth=strike+180
+                    // We trace it by varying the dip from 0 to 90 to 0 along the arc
+                    // At each point: azimuth changes, plunge goes 0 -> 90 -> 0
+                    
+                    for (var t = -90; t <= 90; t += 2) {
+                        var tRad = t * Math.PI / 180
                         
-                        // Convert spherical (lon, lat) to Cartesian on unit sphere
-                        // Using standard geographic convention
-                        var x = Math.cos(latRad) * Math.sin(lonRad)
-                        var y = Math.cos(latRad) * Math.cos(lonRad)
-                        var z = Math.sin(latRad)
+                        // For a vertical plane with strike azimuth:
+                        // The dip at parameter t is: dip = 90 - |t|... no wait
+                        // 
+                        // Actually, trace the great circle in 3D then project:
+                        // Great circle in plane with normal pointing at azimuth (strike+90)
                         
-                        // Lambert equal-area projection (equatorial aspect, center at -Y axis)
-                        // Project from sphere to plane
-                        var denom = 1 - y  // 1 + cos(angular distance from center)
-                        if (denom < 0.0001) continue  // Skip points at the back
+                        // Parameterize: angle t goes from -90 to +90
+                        // plunge = |t|, azimuth = strike + (t >= 0 ? 90 : -90) adjusted
                         
-                        var k = Math.sqrt(2 / denom)
-                        var px = R * k * x / 2
-                        var py = R * k * z / 2
+                        // Better: use spherical coordinates directly
+                        // A great circle perpendicular to azimuth A passes through:
+                        // - (az=A-90, pl=0), (az=A, pl=90), (az=A+90, pl=0)
+                        
+                        // Convert t to position on great circle
+                        var plunge = Math.abs(t)
+                        var az = strike + (t >= 0 ? 90 : -90)
+                        if (plunge === 90) az = strike  // pole of the plane
+                        
+                        // Actually let's do this properly with 3D coordinates
+                        // The great circle is the intersection of the sphere with a vertical plane
+                        // striking at 'strike' degrees
+                        
+                        // Points on this great circle:
+                        // x = cos(t) * sin(strike)
+                        // y = cos(t) * cos(strike)  
+                        // z = sin(t)
+                        // where t is the inclination from horizontal (-90 to +90)
+                        
+                        var x = Math.cos(tRad) * Math.sin(strikeRad)
+                        var y = Math.cos(tRad) * Math.cos(strikeRad)
+                        var z = Math.sin(tRad)
+                        
+                        // For lower hemisphere stereonet, we want z <= 0
+                        // But we're looking DOWN, so flip: use z >= 0 as "lower" hemisphere
+                        // Standard convention: center is nadir (straight down), z+ is down
+                        
+                        // Schmidt projection (polar aspect, looking down at lower hemisphere):
+                        // r = R * sqrt(2) * sqrt(1 - z) / sqrt(2) = R * sqrt(1 - z) ... 
+                        // Wait, standard formula: r = R * sqrt(2) * sin(colatitude/2)
+                        // colatitude = angle from pole = 90 - latitude
+                        // For z = sin(lat), colatitude = 90 - lat = acos(z) approximately
+                        
+                        // Using: r = R * sqrt(2) * sin((90° - plunge°)/2)
+                        // where plunge = elevation from horizontal = t
+                        // So for lower hemisphere: we use z <= 0, and plunge = -t
+                        
+                        // Let's just use the direct formula:
+                        // For a point at (azimuth, plunge) in structural geology terms:
+                        // Schmidt: r = R * sqrt(2) * sin((90 - plunge)/2 * pi/180)
+                        //        = R * sqrt(2) * cos(plunge/2 * pi/180)
+                        
+                        // Here t represents plunge (angle below horizontal)
+                        // t = 0: on the primitive circle (horizontal)
+                        // t = 90: at center (vertical down)
+                        // t = -90: would be vertical up (not on lower hemisphere)
+                        
+                        // For lower hemisphere only: t from 0 to 90 for one half,
+                        // but great circles go edge to edge through center
+                        // So we trace from one side to the other
+                        
+                        // The trick: a great circle on lower hemisphere goes from
+                        // (strike, 0) to (strike+180, 0) passing through center
+                        
+                        // Use inclination i from 0 to 180:
+                        // i=0: point at (strike, plunge=0)
+                        // i=90: point at center (plunge=90)
+                        // i=180: point at (strike+180, plunge=0)
+                        
+                        var i = t + 90  // i goes from 0 to 180
+                        var iRad = i * Math.PI / 180
+                        
+                        // Plunge goes 0 -> 90 -> 0
+                        var plungeDeg = 90 - Math.abs(90 - i)
+                        // Azimuth 
+                        var azDeg = (i <= 90) ? strike : (strike + 180)
+                        
+                        // Project using Schmidt formula
+                        var pt = projectPoint(plungeDeg, azDeg, R)
                         
                         if (first) {
-                            ctx.moveTo(cx + px, cy - py)
+                            ctx.moveTo(cx + pt.x, cy - pt.y)
                             first = false
                         } else {
-                            ctx.lineTo(cx + px, cy - py)
-                        }
-                    }
-                    ctx.stroke()
-                }
-                
-                // Draw a great circle (meridian) on the Schmidt net
-                // lon: longitude in degrees from center (-90 to +90 visible)
-                function drawGreatCircle(ctx, cx, cy, R, lon) {
-                    ctx.beginPath()
-                    var first = true
-                    var lonRad = lon * Math.PI / 180
-                    
-                    // Trace along the great circle by varying latitude from -90 to +90
-                    for (var lat = -90; lat <= 90; lat += 2) {
-                        var latRad = lat * Math.PI / 180
-                        
-                        // Convert spherical (lon, lat) to Cartesian on unit sphere
-                        var x = Math.cos(latRad) * Math.sin(lonRad)
-                        var y = Math.cos(latRad) * Math.cos(lonRad)
-                        var z = Math.sin(latRad)
-                        
-                        // Only draw front hemisphere (y >= 0 means front)
-                        if (y < -0.001) continue
-                        
-                        // Lambert equal-area projection (equatorial aspect)
-                        var denom = 1 + y
-                        if (denom < 0.0001) continue
-                        
-                        var k = Math.sqrt(2 / denom)
-                        var px = R * k * x / 2
-                        var py = R * k * z / 2
-                        
-                        if (first) {
-                            ctx.moveTo(cx + px, cy - py)
-                            first = false
-                        } else {
-                            ctx.lineTo(cx + px, cy - py)
+                            ctx.lineTo(cx + pt.x, cy - pt.y)
                         }
                     }
                     ctx.stroke()
