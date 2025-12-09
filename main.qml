@@ -158,29 +158,32 @@ Item {
                 }
                 
                 function drawSchmidtNet(ctx, cx, cy, R) {
+                    // Schmidt net uses equatorial Lambert azimuthal equal-area projection
+                    // The net shows great circles (longitude lines) curving E-W
+                    // and small circles (latitude lines) as curved horizontal arcs
+                    
                     ctx.strokeStyle = "#CCCCCC"
                     ctx.lineWidth = 0.5
                     
-                    // For a structural geology stereonet (polar aspect, lower hemisphere):
-                    // - Small circles are concentric circles (constant plunge/dip)
-                    // - Great circles are the curved lines connecting N-S through E or W
+                    // Clip to primitive circle
+                    ctx.save()
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, R, 0, 2 * Math.PI)
+                    ctx.clip()
                     
-                    // Draw small circles (constant plunge) - these ARE concentric circles
-                    // in the polar Schmidt projection
-                    for (var plunge = 10; plunge < 90; plunge += 10) {
-                        // Schmidt formula: r = R * sqrt(2) * sin((90 - plunge)/2)
-                        // which equals: r = R * sqrt(2) * cos(plunge/2) for complement
-                        var r = R * Math.sqrt(2) * Math.cos(plunge * Math.PI / 180 / 2)
-                        ctx.beginPath()
-                        ctx.arc(cx, cy, r, 0, 2 * Math.PI)
-                        ctx.stroke()
+                    // Draw small circles (latitude lines - horizontal curves)
+                    for (var lat = -80; lat <= 80; lat += 10) {
+                        if (lat === 0) continue  // Skip equator, drawn separately
+                        drawSmallCircleLat(ctx, cx, cy, R, lat)
                     }
                     
-                    // Draw great circles (planes passing through center)
-                    // These appear as arcs connecting opposite points on the primitive
-                    for (var strike = 10; strike < 180; strike += 10) {
-                        drawGreatCircleArc(ctx, cx, cy, R, strike)
+                    // Draw great circles (longitude lines - vertical curves from N to S)
+                    for (var lon = -80; lon <= 80; lon += 10) {
+                        if (lon === 0) continue  // Skip central meridian, drawn separately
+                        drawGreatCircleLon(ctx, cx, cy, R, lon)
                     }
+                    
+                    ctx.restore()
                     
                     // Outer circle (primitive)
                     ctx.lineWidth = 2
@@ -189,7 +192,7 @@ Item {
                     ctx.arc(cx, cy, R, 0, 2 * Math.PI)
                     ctx.stroke()
                     
-                    // N-S and E-W reference lines
+                    // N-S line (central meridian) and E-W line (equator)
                     ctx.lineWidth = 0.5
                     ctx.strokeStyle = "#999999"
                     ctx.beginPath()
@@ -212,100 +215,60 @@ Item {
                     ctx.fillText("W", cx - R - 12, cy)
                 }
                 
-                // Draw a great circle arc on the Schmidt net
-                // A great circle passes through the center of the sphere
-                // On a polar stereonet, it appears as an arc from one edge to the opposite edge
-                // strike: the azimuth where the arc crosses the primitive (0-180)
-                function drawGreatCircleArc(ctx, cx, cy, R, strike) {
+                // Lambert equal-area projection (equatorial aspect)
+                // Projects a point on the sphere to the plane
+                // lon, lat in radians; returns x, y scaled by R
+                function lambertProject(lon, lat, R) {
+                    // For equatorial aspect centered at lon=0, lat=0
+                    // k' = sqrt(2 / (1 + cos(lat) * cos(lon)))
+                    // x = k' * cos(lat) * sin(lon)
+                    // y = k' * sin(lat)
+                    var cosLat = Math.cos(lat)
+                    var sinLat = Math.sin(lat)
+                    var cosLon = Math.cos(lon)
+                    var sinLon = Math.sin(lon)
+                    
+                    var denom = 1 + cosLat * cosLon
+                    if (denom < 0.0001) return null  // Point on back of sphere
+                    
+                    var k = Math.sqrt(2 / denom)
+                    return {
+                        x: R * k * cosLat * sinLon / Math.sqrt(2),
+                        y: R * k * sinLat / Math.sqrt(2)
+                    }
+                }
+                
+                // Draw a small circle (constant latitude)
+                function drawSmallCircleLat(ctx, cx, cy, R, latDeg) {
                     ctx.beginPath()
                     var first = true
-                    var strikeRad = strike * Math.PI / 180
+                    var lat = latDeg * Math.PI / 180
                     
-                    // A great circle with this strike goes from azimuth=strike to azimuth=strike+180
-                    // We trace it by varying the dip from 0 to 90 to 0 along the arc
-                    // At each point: azimuth changes, plunge goes 0 -> 90 -> 0
+                    for (var lonDeg = -90; lonDeg <= 90; lonDeg += 2) {
+                        var lon = lonDeg * Math.PI / 180
+                        var pt = lambertProject(lon, lat, R)
+                        if (!pt) continue
+                        
+                        if (first) {
+                            ctx.moveTo(cx + pt.x, cy - pt.y)
+                            first = false
+                        } else {
+                            ctx.lineTo(cx + pt.x, cy - pt.y)
+                        }
+                    }
+                    ctx.stroke()
+                }
+                
+                // Draw a great circle (constant longitude / meridian)
+                function drawGreatCircleLon(ctx, cx, cy, R, lonDeg) {
+                    ctx.beginPath()
+                    var first = true
+                    var lon = lonDeg * Math.PI / 180
                     
-                    for (var t = -90; t <= 90; t += 2) {
-                        var tRad = t * Math.PI / 180
-                        
-                        // For a vertical plane with strike azimuth:
-                        // The dip at parameter t is: dip = 90 - |t|... no wait
-                        // 
-                        // Actually, trace the great circle in 3D then project:
-                        // Great circle in plane with normal pointing at azimuth (strike+90)
-                        
-                        // Parameterize: angle t goes from -90 to +90
-                        // plunge = |t|, azimuth = strike + (t >= 0 ? 90 : -90) adjusted
-                        
-                        // Better: use spherical coordinates directly
-                        // A great circle perpendicular to azimuth A passes through:
-                        // - (az=A-90, pl=0), (az=A, pl=90), (az=A+90, pl=0)
-                        
-                        // Convert t to position on great circle
-                        var plunge = Math.abs(t)
-                        var az = strike + (t >= 0 ? 90 : -90)
-                        if (plunge === 90) az = strike  // pole of the plane
-                        
-                        // Actually let's do this properly with 3D coordinates
-                        // The great circle is the intersection of the sphere with a vertical plane
-                        // striking at 'strike' degrees
-                        
-                        // Points on this great circle:
-                        // x = cos(t) * sin(strike)
-                        // y = cos(t) * cos(strike)  
-                        // z = sin(t)
-                        // where t is the inclination from horizontal (-90 to +90)
-                        
-                        var x = Math.cos(tRad) * Math.sin(strikeRad)
-                        var y = Math.cos(tRad) * Math.cos(strikeRad)
-                        var z = Math.sin(tRad)
-                        
-                        // For lower hemisphere stereonet, we want z <= 0
-                        // But we're looking DOWN, so flip: use z >= 0 as "lower" hemisphere
-                        // Standard convention: center is nadir (straight down), z+ is down
-                        
-                        // Schmidt projection (polar aspect, looking down at lower hemisphere):
-                        // r = R * sqrt(2) * sqrt(1 - z) / sqrt(2) = R * sqrt(1 - z) ... 
-                        // Wait, standard formula: r = R * sqrt(2) * sin(colatitude/2)
-                        // colatitude = angle from pole = 90 - latitude
-                        // For z = sin(lat), colatitude = 90 - lat = acos(z) approximately
-                        
-                        // Using: r = R * sqrt(2) * sin((90° - plunge°)/2)
-                        // where plunge = elevation from horizontal = t
-                        // So for lower hemisphere: we use z <= 0, and plunge = -t
-                        
-                        // Let's just use the direct formula:
-                        // For a point at (azimuth, plunge) in structural geology terms:
-                        // Schmidt: r = R * sqrt(2) * sin((90 - plunge)/2 * pi/180)
-                        //        = R * sqrt(2) * cos(plunge/2 * pi/180)
-                        
-                        // Here t represents plunge (angle below horizontal)
-                        // t = 0: on the primitive circle (horizontal)
-                        // t = 90: at center (vertical down)
-                        // t = -90: would be vertical up (not on lower hemisphere)
-                        
-                        // For lower hemisphere only: t from 0 to 90 for one half,
-                        // but great circles go edge to edge through center
-                        // So we trace from one side to the other
-                        
-                        // The trick: a great circle on lower hemisphere goes from
-                        // (strike, 0) to (strike+180, 0) passing through center
-                        
-                        // Use inclination i from 0 to 180:
-                        // i=0: point at (strike, plunge=0)
-                        // i=90: point at center (plunge=90)
-                        // i=180: point at (strike+180, plunge=0)
-                        
-                        var i = t + 90  // i goes from 0 to 180
-                        var iRad = i * Math.PI / 180
-                        
-                        // Plunge goes 0 -> 90 -> 0
-                        var plungeDeg = 90 - Math.abs(90 - i)
-                        // Azimuth 
-                        var azDeg = (i <= 90) ? strike : (strike + 180)
-                        
-                        // Project using Schmidt formula
-                        var pt = projectPoint(plungeDeg, azDeg, R)
+                    for (var latDeg = -90; latDeg <= 90; latDeg += 2) {
+                        var lat = latDeg * Math.PI / 180
+                        var pt = lambertProject(lon, lat, R)
+                        if (!pt) continue
                         
                         if (first) {
                             ctx.moveTo(cx + pt.x, cy - pt.y)
@@ -318,11 +281,12 @@ Item {
                 }
             }
             
-            Flow {
-                id: legendFlow
+            Row {
+                id: legendRow
                 width: parent.width
-                spacing: 10
+                spacing: 15
                 visible: canvas.hasGenerations
+                anchors.horizontalCenter: parent.horizontalCenter
                 
                 Repeater {
                     id: legendRepeater
@@ -335,7 +299,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                         }
                         Text {
-                            text: modelData
+                            text: modelData || "Unknown"
                             font.pixelSize: 12
                             color: "#333333"
                             anchors.verticalCenter: parent.verticalCenter
@@ -410,12 +374,11 @@ Item {
                         
                         if (hasGen) {
                             var gen = feat.attribute(genField)
-                            if (gen !== null && gen !== undefined) {
-                                point.gen = gen
-                                if (generationSet[gen] === undefined) {
-                                    generationSet[gen] = generationList.length
-                                    generationList.push(String(gen))
-                                }
+                            var genKey = (gen !== null && gen !== undefined && gen !== "") ? String(gen) : "Unknown"
+                            point.gen = genKey
+                            if (generationSet[genKey] === undefined) {
+                                generationSet[genKey] = generationList.length
+                                generationList.push(genKey)
                             }
                         }
                         dataPoints.push(point)
@@ -437,13 +400,12 @@ Item {
                         var point = { az: parseFloat(azimuth), pl: parseFloat(plunge) }
                         
                         if (hasGen) {
-                            var gen = feat.attribute(genField)
-                            if (gen !== null && gen !== undefined) {
-                                point.gen = gen
-                                if (generationSet[gen] === undefined) {
-                                    generationSet[gen] = generationList.length
-                                    generationList.push(String(gen))
-                                }
+                            var gen2 = feat.attribute(genField)
+                            var genKey2 = (gen2 !== null && gen2 !== undefined && gen2 !== "") ? String(gen2) : "Unknown"
+                            point.gen = genKey2
+                            if (generationSet[genKey2] === undefined) {
+                                generationSet[genKey2] = generationList.length
+                                generationList.push(genKey2)
                             }
                         }
                         dataPoints.push(point)
