@@ -28,7 +28,7 @@ Item {
             font.pixelSize: 24
             background: Rectangle {
                 color: plotBtn.pressed ? "#1976D2" : (plugin.extentOnly ? "#FF9800" : "#2196F3")
-                radius: 4
+                radius: 24
                 border.color: plugin.extentOnly ? "#E65100" : "#0D47A1"
                 border.width: 2
             }
