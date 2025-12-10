@@ -25,6 +25,13 @@ https://github.com/swaxi/stereonet/archive/refs/heads/main.zip
 2. Tap the 🌐 button
 3. View your data on the stereonet
 
+## Toggle between full data and screen extent
+
+| Action | Result |
+|--------|--------|
+| **Long press** | Toggle between all features (🌐) and current view only (🔍) |
+
+
 ## Supported Fields
 
 | Data Type | Field Names |

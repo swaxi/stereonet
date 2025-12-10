@@ -2,7 +2,7 @@
 name=Stereonet
 description=Plot poles to bedding and lineations on equal-area stereonet (Schmidt projection)
 author=Mark Jessell
-version=1.0d
+version=1.0e
 qgisMinimumVersion=3.0
 homepage=
 icon=Schmidtnet.svg

@@ -10,6 +10,8 @@ Item {
     
     property var mainWindow: iface.mainWindow()
     property var dashBoard: iface.findItemByObjectName('dashBoard')
+    property var mapCanvas: iface.mapCanvas()
+    property bool extentOnly: false  // false = all features, true = current view only
     
     property var generationColors: [
         "#E53935", "#1E88E5", "#43A047", "#FB8C00", "#8E24AA",
@@ -19,24 +21,29 @@ Item {
     Component {
         id: plotButtonComponent
         Button {
+            id: plotBtn
             width: 48
             height: 48
-            text: "🌐"
+            text: plugin.extentOnly ? "🔍" : "🌐"
             font.pixelSize: 24
             background: Rectangle {
-                color: parent.pressed ? "#1976D2" : "#2196F3"
+                color: plotBtn.pressed ? "#1976D2" : (plugin.extentOnly ? "#FF9800" : "#2196F3")
                 radius: 4
-                border.color: "#0D47A1"
+                border.color: plugin.extentOnly ? "#E65100" : "#0D47A1"
                 border.width: 2
             }
             contentItem: Text {
-                text: parent.text
-                font: parent.font
+                text: plotBtn.text
+                font: plotBtn.font
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
                 color: "white"
             }
             onClicked: processLayer()
+            onPressAndHold: {
+                plugin.extentOnly = !plugin.extentOnly
+                mainWindow.displayToast(plugin.extentOnly ? "Mode: Current View Only 🔍" : "Mode: All Features 🌐")
+            }
         }
     }
     
@@ -334,13 +341,64 @@ Item {
             if (!layer) { mainWindow.displayToast("No layer selected"); return }
             if (layer.type !== 0) { mainWindow.displayToast("Not a vector layer"); return }
             
+            // Get all features first
             layer.selectAll()
-            var features = layer.selectedFeatures()
+            var allFeatures = layer.selectedFeatures()
+            layer.removeSelection()
             
-            if (!features || features.length === 0) {
-                layer.removeSelection()
+            if (!allFeatures || allFeatures.length === 0) {
                 mainWindow.displayToast("No features in layer")
                 return
+            }
+            
+            var features = []
+            
+            // Filter by extent if in extentOnly mode
+            if (extentOnly && mapCanvas) {
+                // Get layer extent to compare with map extent (handles CRS difference)
+                var layerExt = layer.extent
+                var mapExt = mapCanvas.mapSettings.visibleExtent
+                
+                // Determine if we should use layer coords or map coords
+                // by checking if layer extent overlaps with map extent
+                var useLayerCrs = true
+                if (layerExt) {
+                    var layerInMapRange = (layerExt.xMinimum < 180 && layerExt.xMinimum > -180)
+                    var mapInLayerRange = (mapExt.xMinimum < 180 && mapExt.xMinimum > -180)
+                    // If both are in lat/lon range, use map extent directly
+                    useLayerCrs = layerInMapRange && mapInLayerRange
+                }
+                
+                var xMin = mapExt.xMinimum
+                var xMax = mapExt.xMaximum
+                var yMin = mapExt.yMinimum
+                var yMax = mapExt.yMaximum
+                
+                for (var f = 0; f < allFeatures.length; f++) {
+                    var feat = allFeatures[f]
+                    var geom = feat.geometry
+                    
+                    if (geom && geom.asWkt) {
+                        var wkt = geom.asWkt()
+                        // Parse Point(x y)
+                        var match = wkt.match(/Point\s*\(\s*([-\d.]+)\s+([-\d.]+)\s*\)/i)
+                        if (match) {
+                            var x = parseFloat(match[1])
+                            var y = parseFloat(match[2])
+                            
+                            if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
+                                features.push(feat)
+                            }
+                        }
+                    }
+                }
+                
+                if (features.length === 0) {
+                    mainWindow.displayToast("No features in view (0/" + allFeatures.length + ")")
+                    return
+                }
+            } else {
+                features = allFeatures
             }
             
             var fieldNames = features[0].fields.names
@@ -431,7 +489,8 @@ Item {
             legendRepeater.model = generationList
             
             var genInfo = canvas.hasGenerations ? " - " + generationList.length + " gens" : ""
-            titleText.text = plotType + " (" + dataPoints.length + " pts)" + genInfo + "\n" + layer.name
+            var viewMode = extentOnly ? " [View]" : ""
+            titleText.text = plotType + " (" + dataPoints.length + " pts)" + genInfo + viewMode + "\n" + layer.name
             
             canvas.requestPaint()
             stereonetPopup.open()
