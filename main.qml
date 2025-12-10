@@ -61,7 +61,7 @@ Item {
         id: stereonetPopup
         parent: mainWindow.contentItem
         width: Math.min(mainWindow.width - 40, 540)
-        height: Math.min(mainWindow.height - 40, 680)
+        height: Math.min(mainWindow.height - 380, 680)
         x: (mainWindow.width - width) / 2
         y: (mainWindow.height - height) / 2
         modal: true
