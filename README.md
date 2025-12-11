@@ -29,7 +29,7 @@ https://github.com/swaxi/stereonet/archive/refs/heads/main.zip
 
 | Data | Symbol | When |
 |------|--------|------|
-| Poles to bedding | ● Circle | Only dip/dip_dir fields present |
+| Poles to planes | ● Circle | Only dip/dip_dir fields present |
 | Lineations | ▲ Triangle | Plunge/azimuth fields present |
 | Planes | Great circle arc | Both plane and lineation fields present |
 
