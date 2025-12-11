@@ -97,7 +97,10 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 
                 property var points: []
+                property var planes: []       // For great circles (dip/dipDir)
+                property var lineations: []   // For triangles (plunge/azimuth)
                 property bool isPoles: false
+                property bool hasBoth: false  // Has both planes and lineations
                 property var generationMap: ({})
                 property bool hasGenerations: false
                 
@@ -111,18 +114,43 @@ Item {
                     
                     drawSchmidtNet(ctx, cx, cy, R)
                     
-                    // Plot data points
+                    // Clip to primitive circle for data
+                    ctx.save()
+                    ctx.beginPath()
+                    ctx.arc(cx, cy, R, 0, 2 * Math.PI)
+                    ctx.clip()
+                    
+                    // Draw great circles for planes (if hasBoth mode)
+                    if (hasBoth && planes.length > 0) {
+                        ctx.lineWidth = 2
+                        for (var p = 0; p < planes.length; p++) {
+                            var plane = planes[p]
+                            if (hasGenerations && plane.gen !== undefined) {
+                                var genIdx = generationMap[plane.gen]
+                                ctx.strokeStyle = genIdx !== undefined ? 
+                                    generationColors[genIdx % generationColors.length] : "#333333"
+                            } else {
+                                ctx.strokeStyle = "#E53935"
+                            }
+                            drawPlaneGreatCircle(ctx, cx, cy, R, plane.d, plane.dd)
+                        }
+                    }
+                    
+                    // Plot data points or lineations
                     ctx.globalAlpha = 0.85
-                    for (var j = 0; j < points.length; j++) {
-                        var p = points[j]
+                    var pointsToPlot = hasBoth ? lineations : points
+                    
+                    for (var j = 0; j < pointsToPlot.length; j++) {
+                        var pt = pointsToPlot[j]
                         var az, plunge
+                        var isLineation = hasBoth || !isPoles
                         
-                        if (isPoles) {
-                            az = (p.dd + 180) % 360
-                            plunge = 90 - p.d
+                        if (!hasBoth && isPoles) {
+                            az = (pt.dd + 180) % 360
+                            plunge = 90 - pt.d
                         } else {
-                            az = p.az
-                            plunge = p.pl
+                            az = pt.az
+                            plunge = pt.pl
                         }
                         
                         if (plunge < 0) {
@@ -131,23 +159,89 @@ Item {
                         }
                         if (plunge > 90) plunge = 90
                         
-                        var pt = projectPoint(plunge, az, R)
-                        var px = cx + pt.x
-                        var py = cy - pt.y
+                        var proj = projectPoint(plunge, az, R)
+                        var px = cx + proj.x
+                        var py = cy - proj.y
                         
-                        if (hasGenerations && p.gen !== undefined && p.gen !== null) {
-                            var genIdx = generationMap[p.gen]
+                        if (hasGenerations && pt.gen !== undefined && pt.gen !== null) {
+                            var genIdx = generationMap[pt.gen]
                             ctx.fillStyle = genIdx !== undefined ? 
                                 generationColors[genIdx % generationColors.length] : "#333333"
                         } else {
                             ctx.fillStyle = "#E53935"
                         }
                         
-                        ctx.beginPath()
-                        ctx.arc(px, py, 4, 0, 2 * Math.PI)
-                        ctx.fill()
+                        if (isLineation) {
+                            // Draw triangle for lineations
+                            drawTriangle(ctx, px, py, 6)
+                        } else {
+                            // Draw circle for poles
+                            ctx.beginPath()
+                            ctx.arc(px, py, 4, 0, 2 * Math.PI)
+                            ctx.fill()
+                        }
                     }
                     ctx.globalAlpha = 1.0
+                    ctx.restore()
+                }
+                
+                // Draw a filled triangle centered at x, y
+                function drawTriangle(ctx, x, y, size) {
+                    ctx.beginPath()
+                    ctx.moveTo(x, y - size)  // Top
+                    ctx.lineTo(x - size * 0.866, y + size * 0.5)  // Bottom left
+                    ctx.lineTo(x + size * 0.866, y + size * 0.5)  // Bottom right
+                    ctx.closePath()
+                    ctx.fill()
+                }
+                
+                // Draw a great circle for a plane with given dip and dip direction
+                function drawPlaneGreatCircle(ctx, cx, cy, R, dip, dipDir) {
+                    ctx.beginPath()
+                    var first = true
+                    
+                    var dipRad = dip * Math.PI / 180
+                    var dipDirRad = dipDir * Math.PI / 180
+                    
+                    // A great circle representing a plane can be traced by finding points
+                    // where lines in the plane intersect the lower hemisphere
+                    // We parameterize by angle around the plane from 0 to 180 degrees
+                    
+                    for (var angle = 0; angle <= 180; angle += 2) {
+                        var angleRad = angle * Math.PI / 180
+                        
+                        // For a plane with given dip and dip direction:
+                        // The plunge of a line in the plane at angle 'angle' from strike is:
+                        // plunge = atan(tan(dip) * sin(angle))
+                        // The azimuth is: strike + angle (adjusted)
+                        
+                        // Strike is 90 degrees counterclockwise from dip direction
+                        var strike = dipDir - 90
+                        
+                        // Calculate plunge using the rake formula
+                        var plunge = Math.atan(Math.tan(dipRad) * Math.sin(angleRad)) * 180 / Math.PI
+                        
+                        // Azimuth along the plane
+                        var az = strike + angle
+                        
+                        // Ensure plunge is positive (lower hemisphere)
+                        if (plunge < 0) {
+                            plunge = -plunge
+                            az = az + 180
+                        }
+                        
+                        az = ((az % 360) + 360) % 360
+                        
+                        var proj = projectPoint(plunge, az, R)
+                        
+                        if (first) {
+                            ctx.moveTo(cx + proj.x, cy - proj.y)
+                            first = false
+                        } else {
+                            ctx.lineTo(cx + proj.x, cy - proj.y)
+                        }
+                    }
+                    ctx.stroke()
                 }
                 
                 // Schmidt (Lambert equal-area) projection
@@ -300,10 +394,36 @@ Item {
                     model: []
                     Row {
                         spacing: 4
-                        Rectangle {
-                            width: 12; height: 12; radius: 6
-                            color: generationColors[index % generationColors.length]
+                        Canvas {
+                            width: 14
+                            height: 14
                             anchors.verticalCenter: parent.verticalCenter
+                            onPaint: {
+                                var ctx = getContext("2d")
+                                ctx.clearRect(0, 0, width, height)
+                                ctx.fillStyle = generationColors[index % generationColors.length]
+                                
+                                if (canvas.hasBoth || !canvas.isPoles) {
+                                    // Triangle for lineations
+                                    ctx.beginPath()
+                                    ctx.moveTo(7, 1)
+                                    ctx.lineTo(1, 13)
+                                    ctx.lineTo(13, 13)
+                                    ctx.closePath()
+                                    ctx.fill()
+                                } else {
+                                    // Circle for poles
+                                    ctx.beginPath()
+                                    ctx.arc(7, 7, 6, 0, 2 * Math.PI)
+                                    ctx.fill()
+                                }
+                            }
+                            Component.onCompleted: requestPaint()
+                            Connections {
+                                target: canvas
+                                function onHasBothChanged() { requestPaint() }
+                                function onIsPolesChanged() { requestPaint() }
+                            }
                         }
                         Text {
                             text: modelData || "Unknown"
@@ -402,20 +522,68 @@ Item {
             }
             
             var fieldNames = features[0].fields.names
-            var dipField = findFieldName(fieldNames, ["dip", "dip_angle"])
-            var dipDirField = findFieldName(fieldNames, ["dip_dir", "dip_direction", "dipdirection", "dipdir", "dd"])
+            var dipField = findFieldName(fieldNames, ["dip", "dip_angle", "dip_ref"])
+            var dipDirField = findFieldName(fieldNames, ["dip_dir", "dip_direction", "dipdirection", "dipdir", "dd", "dipdir_ref"])
             var azField = findFieldName(fieldNames, ["azimuth", "az", "bearing", "trend"])
             var plField = findFieldName(fieldNames, ["plunge", "pl"])
             var genField = findFieldName(fieldNames, ["generation", "gen", "phase", "event", "set"])
             
             var dataPoints = []
+            var planeData = []
+            var lineationData = []
             var plotType = ""
             var isPoles = false
+            var hasBoth = false
             var generationSet = {}
             var generationList = []
             var hasGen = (genField !== null)
             
-            if (dipField && dipDirField) {
+            // Check if we have BOTH plane and lineation data
+            var hasPlaneFields = (dipField && dipDirField)
+            var hasLineationFields = (azField && plField)
+            
+            if (hasPlaneFields && hasLineationFields) {
+                // Combined mode: planes as great circles, lineations as triangles
+                plotType = "Planes & Lineations"
+                hasBoth = true
+                
+                for (var i = 0; i < features.length; i++) {
+                    var feat = features[i]
+                    var dip = feat.attribute(dipField)
+                    var dipDir = feat.attribute(dipDirField)
+                    var azimuth = feat.attribute(azField)
+                    var plunge = feat.attribute(plField)
+                    
+                    var genKey = "Unknown"
+                    if (hasGen) {
+                        var gen = feat.attribute(genField)
+                        genKey = (gen !== null && gen !== undefined && gen !== "") ? String(gen) : "Unknown"
+                        if (generationSet[genKey] === undefined) {
+                            generationSet[genKey] = generationList.length
+                            generationList.push(genKey)
+                        }
+                    }
+                    
+                    // Add plane if valid
+                    if (dip !== null && dip !== undefined && 
+                        dipDir !== null && dipDir !== undefined &&
+                        !isNaN(parseFloat(dip)) && !isNaN(parseFloat(dipDir))) {
+                        var plane = { d: parseFloat(dip), dd: parseFloat(dipDir) }
+                        if (hasGen) plane.gen = genKey
+                        planeData.push(plane)
+                    }
+                    
+                    // Add lineation if valid
+                    if (azimuth !== null && azimuth !== undefined && 
+                        plunge !== null && plunge !== undefined &&
+                        !isNaN(parseFloat(azimuth)) && !isNaN(parseFloat(plunge))) {
+                        var lin = { az: parseFloat(azimuth), pl: parseFloat(plunge) }
+                        if (hasGen) lin.gen = genKey
+                        lineationData.push(lin)
+                    }
+                }
+                
+            } else if (hasPlaneFields) {
                 plotType = "Poles to Bedding"
                 isPoles = true
                 
@@ -442,7 +610,7 @@ Item {
                         dataPoints.push(point)
                     }
                 }
-            } else if (azField && plField) {
+            } else if (hasLineationFields) {
                 plotType = "Lineations"
                 isPoles = false
                 
@@ -477,20 +645,33 @@ Item {
             
             layer.removeSelection()
             
-            if (dataPoints.length === 0) {
+            // Check we have data
+            if (hasBoth) {
+                if (planeData.length === 0 && lineationData.length === 0) {
+                    mainWindow.displayToast("No valid data points")
+                    return
+                }
+            } else if (dataPoints.length === 0) {
                 mainWindow.displayToast("No valid data points")
                 return
             }
             
             canvas.points = dataPoints
+            canvas.planes = planeData
+            canvas.lineations = lineationData
             canvas.isPoles = isPoles
+            canvas.hasBoth = hasBoth
             canvas.generationMap = generationSet
             canvas.hasGenerations = (generationList.length > 0)
             legendRepeater.model = generationList
             
+            var countInfo = hasBoth ? 
+                "(" + planeData.length + " planes, " + lineationData.length + " lins)" :
+                "(" + dataPoints.length + " pts)"
             var genInfo = canvas.hasGenerations ? " - " + generationList.length + " gens" : ""
             var viewMode = extentOnly ? " [View]" : ""
-            titleText.text = plotType + " (" + dataPoints.length + " pts)" + genInfo + viewMode + "\n" + layer.name
+            
+            titleText.text = plotType + " " + countInfo + genInfo + viewMode + "\n" + layer.name
             
             canvas.requestPaint()
             stereonetPopup.open()
