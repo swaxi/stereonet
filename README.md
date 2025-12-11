@@ -1,7 +1,7 @@
 # QField Stereonet Plugin
 
 A structural geology stereonet plugin for QField that plots orientation data on a Schmidt (equal-area) projection.
-
+![Screen image](screen.png)   
 ## Features
 
 - **Schmidt net** with proper Lambert azimuthal equal-area projection
@@ -14,9 +14,9 @@ A structural geology stereonet plugin for QField that plots orientation data on 
 
 ## Installation
 
-1. Copy `main.qml` to your QField plugins directory
-2. Restart QField
-3. Look for the 🌐 button in the toolbar
+1. Upload from zip file via URL in Qfield App on your device in settings/plugins:
+https://github.com/swaxi/stereonet/archive/refs/heads/main.zip    
+23. Look for the 🌐 button in the toolbar
 
 ## Usage
 
