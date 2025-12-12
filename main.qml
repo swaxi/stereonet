@@ -157,7 +157,10 @@ Item {
                             plunge = -plunge
                             az = (az + 180) % 360
                         }
-                        if (plunge > 90) plunge = 90
+                        if (plunge > 90) {
+                            plunge = 180 - plunge
+                            az = (az + 180) % 360
+                        }
                         
                         var proj = projectPoint(plunge, az, R)
                         var px = cx + proj.x
