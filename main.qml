@@ -13,6 +13,14 @@ Item {
     property var mapCanvas: iface.mapCanvas()
     property bool extentOnly: false  // false = all features, true = current view only
     
+    // --- Field name candidates: add your own column name variants to any list ---
+    property var dipFieldNames:        ["dip", "dip_angle", "dip_ref"]
+    property var dipDirFieldNames:     ["dip_dir", "dip_direction", "dipdirection", "dipdir", "dd", "dipdir_ref"]
+    property var azimuthFieldNames:    ["azimuth", "az", "bearing", "trend"]
+    property var plungeFieldNames:     ["plunge", "pl"]
+    property var generationFieldNames: ["generation", "gen", "phase", "event", "set"]
+    // --------------------------------------------------------------------------
+
     property var generationColors: [
         "#E53935", "#1E88E5", "#43A047", "#FB8C00", "#8E24AA",
         "#00ACC1", "#FFB300", "#6D4C41", "#546E7A", "#D81B60"
@@ -525,11 +533,11 @@ Item {
             }
             
             var fieldNames = features[0].fields.names
-            var dipField = findFieldName(fieldNames, ["dip", "dip_angle", "dip_ref"])
-            var dipDirField = findFieldName(fieldNames, ["dip_dir", "dip_direction", "dipdirection", "dipdir", "dd", "dipdir_ref"])
-            var azField = findFieldName(fieldNames, ["azimuth", "az", "bearing", "trend"])
-            var plField = findFieldName(fieldNames, ["plunge", "pl"])
-            var genField = findFieldName(fieldNames, ["generation", "gen", "phase", "event", "set"])
+            var dipField = findFieldName(fieldNames, dipFieldNames)
+            var dipDirField = findFieldName(fieldNames, dipDirFieldNames)
+            var azField = findFieldName(fieldNames, azimuthFieldNames)
+            var plField = findFieldName(fieldNames, plungeFieldNames)
+            var genField = findFieldName(fieldNames, generationFieldNames)
             
             var dataPoints = []
             var planeData = []

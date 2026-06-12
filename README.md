@@ -14,8 +14,9 @@ A structural geology stereonet plugin for QField that plots orientation data on 
 
 ## Installation
 
-1. Upload from zip file via URL in Qfield App on your device in settings/plugins:
+1. Upload from zip file via URL or QR in the Qfield App on your device in settings/plugins:
 https://github.com/swaxi/stereonet/archive/refs/heads/main.zip    
+![QR Code](QR.png)
 23. Look for the 🌐 button in the toolbar
 
 ## Usage
@@ -34,7 +35,8 @@ https://github.com/swaxi/stereonet/archive/refs/heads/main.zip
 | Planes | Great circle arc | Both plane and lineation fields present |
 
 ## Supported Fields
-
+If you would like to add additional field names, add an issue at github or edit the main.qml at lines 17-20   
+   
 | Data Type | Field Names |
 |-----------|-------------|
 | Dip | `dip`, `dip_angle`, `dip_ref` |
