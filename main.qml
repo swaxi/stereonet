@@ -14,8 +14,8 @@ Item {
     property bool extentOnly: false  // false = all features, true = current view only
     
     // --- Field name candidates: add your own column name variants to any list ---
-    property var dipFieldNames:        ["dip", "dip_angle", "dip_ref", "P_dip"]
-    property var dipDirFieldNames:     ["dip_dir", "dip_direction", "dipdirection", "dipdir", "dd", "dipdir_ref", "P_dipAzimuth"]
+    property var dipFieldNames:        ["dip", "dip_angle", "dip_ref", "P_dip","Dip"]
+    property var dipDirFieldNames:     ["dip_dir", "dip_direction", "dipdirection", "dipdir", "dd", "dipdir_ref", "P_dipAzimuth", "Dip Azimuth"]
     property var azimuthFieldNames:    ["azimuth", "az", "bearing", "trend", "L_plungeAzimuth"]
     property var plungeFieldNames:     ["plunge", "pl", "L_plunge"]
     property var generationFieldNames: ["generation", "gen", "phase", "event", "set"]
